@@ -3,7 +3,23 @@
 &nbsp
 
 ![CI CPU testing](https://github.com/ultralytics/yolov5/workflows/CI%20CPU%20testing/badge.svg)
+This is a fork of Ultralytics single stage detector "YoloV5.
 
+The objective of this fork is to add support for the fine-tuning  on the Cityscapes 3D dataset. 
+
+This will allow YoloV5 to be used as the first stage of a 3D object detection 2 stage pipeline. 
+
+## To prepare data:
+Go to the "notebooks" folder, change the "cityscapes" path and run the "cityscapes3d.py" notebook from Visual Studio Code.
+
+It should also run "stand-alone", but without visualisation.
+
+## To train:
+```
+python train.py --data cityscapes.yaml --cfg yolov5m_cityscapes.yaml --weights yolov5m.pt --batch-size 8 --hyp hyp.finetune.yaml
+```
+
+# Original Repository Readme
 This repository represents Ultralytics open-source research into future object detection methods, and incorporates lessons learned and best practices evolved over thousands of hours of training and evolution on anonymized client datasets. **All code and models are under active development, and are subject to modification or deletion without notice.** Use at your own risk.
 
 <img src="https://user-images.githubusercontent.com/26833433/103594689-455e0e00-4eae-11eb-9cdf-7d753e2ceeeb.png" width="1000">** GPU Speed measures end-to-end time per image averaged over 5000 COCO val2017 images using a V100 GPU with batch size 32, and includes image preprocessing, PyTorch FP16 inference, postprocessing and NMS. EfficientDet data from [google/automl](https://github.com/google/automl) at batch size 8.

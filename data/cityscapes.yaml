@@ -1,0 +1,22 @@
+# Cityscapes 3D Bounding Box Datset
+# Train command: python train.py --data cityscapes.yaml
+# Default dataset location is next to /yolov5:
+#   /parent_folder
+#     /cityscapes
+#     /yolov5
+
+
+# download command/URL (optional)
+#download: bash data/scripts/get_coco.sh
+
+# train and val data as 1) directory: path/images/, 2) file: path/images.txt, or 3) list: [path1/images/, path2/images/]
+train: ../cityscapes/train.txt  # 2975 images
+val: ../cityscapes/val.txt  # 500 images
+test: ../cityscapes/test.txt  # 1527 images
+
+# number of classes
+nc: 6
+
+# class names
+names: ["car","truck", "bus", "train", "motorcycle","bicycle"]
+
