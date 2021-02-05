@@ -1,11 +1,13 @@
 import argparse
 import time
 from pathlib import Path
-
+import os
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
+import multiprocessing as mp
+import time
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
@@ -17,6 +19,8 @@ from utils.torch_utils import select_device, load_classifier, time_synchronized
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
+    save_crops = opt.save_crops
+    crop_size = opt.crop_size
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://'))
 
@@ -60,6 +64,7 @@ def detect(save_img=False):
     if device.type != 'cpu':
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
     t0 = time.time()
+    pool = mp.Pool(12)
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -85,7 +90,7 @@ def detect(save_img=False):
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
                 p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
-
+            orig_img = im0.copy()
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -101,13 +106,27 @@ def detect(save_img=False):
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
+                i=0
+                basename = os.path.basename( p.name).split('.')[0]
+                crop_base_path = f"{save_dir}/{basename}"
+                if save_crops:
+                    Path(crop_base_path).mkdir(parents=True,exist_ok=True)
                 for *xyxy, conf, cls in reversed(det):
+                    class_name = names[int(cls)]
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
+                    if save_crops:
+                        (x1,y1,x2,y2) = [int(c) for c in xyxy ]
+                        crop_path = f"{crop_base_path}/det_{i}_{class_name}.jpg"
+                        crop = orig_img[y1:y2,x1:x2]
+                        #cv2.imwrite(crop_path, crop)
+                        pool.apply(cv2.imwrite, args=(crop_path, crop))
+                        i+=1
+                    
                     if save_img or view_img:  # Add bbox to image
                         label = f'{names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
@@ -139,7 +158,8 @@ def detect(save_img=False):
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         print(f"Results saved to {save_dir}{s}")
-
+    pool.close()
+    pool.join()
     print(f'Done. ({time.time() - t0:.3f}s)')
 
 
@@ -161,6 +181,8 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument("--save-crops", action="store_true", help="save crops of objets")
+    parser.add_argument("--crop-size", type=int, default=96)
     opt = parser.parse_args()
     print(opt)
     check_requirements()

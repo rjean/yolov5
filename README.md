@@ -16,7 +16,7 @@ It should also run "stand-alone", but without visualisation.
 
 ## To train:
 ```
-python train.py --data cityscapes.yaml --cfg yolov5m_cityscapes.yaml --weights yolov5m.pt --batch-size 8 --hyp hyp.finetune.yaml
+python train.py --data cityscapes.yaml --cfg yolov5m_cityscapes.yaml --weights yolov5m.pt --batch-size 8 --hyp hyp.finetune.yaml --epochs 30
 ```
 
 # Original Repository Readme
