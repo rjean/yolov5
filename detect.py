@@ -25,7 +25,11 @@ def detect(save_img=False):
         ('rtsp://', 'rtmp://', 'http://'))
 
     # Directories
-    save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
+    #save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
+    if opt.noinc:
+        save_dir=Path(opt.project) / opt.name
+    else:
+        save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)  # make dir
 
     # Initialize
@@ -183,6 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument("--save-crops", action="store_true", help="save crops of objets")
     parser.add_argument("--crop-size", type=int, default=96)
+    parser.add_argument("--noinc", action="store_true", default=False)
     opt = parser.parse_args()
     print(opt)
     check_requirements()
