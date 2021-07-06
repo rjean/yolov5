@@ -38,7 +38,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='precision
 
     # Create Precision-Recall curve and compute AP for each class
     px, py = np.linspace(0, 1, 1000), []  # for plotting
-    pr_score = 0.1  # score to evaluate P and R https://github.com/ultralytics/yolov3/issues/898
+    pr_score = 0.5  # score to evaluate P and R https://github.com/ultralytics/yolov3/issues/898
     s = [unique_classes.shape[0], tp.shape[1]]  # number class, number iou thresholds (i.e. 10 for mAP0.5...0.95)
     ap, p, r = np.zeros(s), np.zeros(s), np.zeros(s)
     for ci, c in enumerate(unique_classes):
