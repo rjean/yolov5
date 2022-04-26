@@ -25,9 +25,6 @@ deeplite-profiler==1.1.9
 defusedxml==0.7.1
 dm-tree==0.1.6
 entrypoints==0.3
-#-e git+ssh://git@github.com/Esmartdriver/esmart-ai-datasets.git@5121d667312abb5c3294864c59a041100978d3dd#egg=esmart_ai_datasets
-#-e git+ssh://git@github.com/Esmartdriver/esmart-ai-models.git@5bf73d26a6a366b9b609e178bbf5ce598fcfc55f#egg=esmart_ai_models
-#-e git+ssh://git@github.com/Esmartdriver/esmart-ai-pipeline.git@7fd53115088ff5d19cfc107437fe07347d9d0a11#egg=esmart_ai_pipeline
 et-xmlfile==1.1.0
 flatbuffers==1.12
 fsspec==2021.7.0
@@ -150,7 +147,6 @@ tensorly==0.4.5
 termcolor==1.1.0
 terminado==0.12.1
 testpath==0.5.0
-tflite-runtime==2.5.0
 thop==0.0.31.post2005241907
 tifffile==2021.11.2
 toml==0.10.2
