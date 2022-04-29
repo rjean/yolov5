@@ -70,6 +70,10 @@ class tf_Conv(keras.layers.Layer):
             self.act = (lambda x: x * tf.nn.relu6(x + 3) * 0.166666667) if act else tf.identity
         elif isinstance(w.act, nn.SiLU):
             self.act = (lambda x: keras.activations.swish(x)) if act else tf.identity
+        elif isinstance(w.act, nn.ReLU6):
+            self.act = lambda x: tf.nn.relu6(x) if act else tf.identity
+        elif isinstance(w.act, nn.ReLU):
+            self.act = lambda x: tf.nn.relu(x) if act else tf.identity
 
     def call(self, inputs):
         return self.act(self.bn(self.conv(inputs)))
