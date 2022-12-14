@@ -92,13 +92,17 @@ class ComputeLoss:
     sort_obj_iou = False
 
     # Compute losses
-    def __init__(self, model, autobalance=False):
+    def __init__(self, model, autobalance=False, multitasks=True):
         device = next(model.parameters()).device  # get model device
         h = model.hyp  # hyperparameters
 
         # Define criteria
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
         BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
+        if multitasks:
+            # TODO add many cls losses as there are cls heads
+            # classification loss
+            CEloss = nn.CrossEntropyLoss().to(device)
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
@@ -108,30 +112,51 @@ class ComputeLoss:
         if g > 0:
             BCEcls, BCEobj = FocalLoss(BCEcls, g), FocalLoss(BCEobj, g)
 
-        m = de_parallel(model).model[-1]  # Detect() module
+        m = de_parallel(model).model[-2]  # Detect() module
         self.balance = {3: [4.0, 1.0, 0.4]}.get(m.nl, [4.0, 1.0, 0.25, 0.06, 0.02])  # P3-P7
         self.ssi = list(m.stride).index(16) if autobalance else 0  # stride 16 index
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, 1.0, h, autobalance
+        self.CEloss = CEloss # classification loss
         self.na = m.na  # number of anchors
         self.nc = m.nc  # number of classes
         self.nl = m.nl  # number of layers
         self.anchors = m.anchors
         self.device = device
+        self.multitasks = multitasks
 
-    def __call__(self, p, targets):  # predictions, targets
+    def __call__(self, preds, targets, targets_cls, det_to_check, mosaic=False):  # predictions, targets, array of 0 and 1, meaning if
+        # the detection is to be checked
+        (p, cls_pred) = preds
+
+        # filter on the images to check for the detections
+        # p = (p[0][img_to_be_checked_idx], p[1][img_to_be_checked_idx], p[2][img_to_be_checked_idx])
+        # targets = targets[torch.where(torch.isin(targets[:,0], img_to_be_checked_idx))[0]]
+        #img_to_be_checked_idx = torch.where(det_to_check == 1)[0].to(self.device)
+        #preds = [preds[i] for i in img_to_be_checked_idx]
+
         lcls = torch.zeros(1, device=self.device)  # class loss
         lbox = torch.zeros(1, device=self.device)  # box loss
         lobj = torch.zeros(1, device=self.device)  # object loss
         tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
 
-        # Losses
+        # Classification loss
+        if self.multitasks and not mosaic:
+            assert cls_pred is not None
+            lcls_cls = self.CEloss(cls_pred, targets_cls)
+        else:
+            lcls_cls = torch.zeros(1, device=self.device)
+
+        # Detection Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
+            # pi size = [batch size, number of anchors, grid size x, grid size y, bbox] where bbox=[x, y, w, h, obj, cls1, cls2, ...]]
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
             tobj = torch.zeros(pi.shape[:4], dtype=pi.dtype, device=self.device)  # target obj
 
             n = b.shape[0]  # number of targets
+            # if there is at least one target
             if n:
                 # pxy, pwh, _, pcls = pi[b, a, gj, gi].tensor_split((2, 4, 5), dim=1)  # faster, requires torch 1.8.0
+                # pi - (16,3,7,7,7) = bs, ch,
                 pxy, pwh, _, pcls = pi[b, a, gj, gi].split((2, 2, 1, self.nc), 1)  # target-subset of predictions
 
                 # Regression
@@ -153,28 +178,40 @@ class ComputeLoss:
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
                     t = torch.full_like(pcls, self.cn, device=self.device)  # targets
-                    t[range(n), tcls[i]] = self.cp
+                    t[range(n), tcls[i]] = self.cp  # one-hot target. full zeros if no target
                     lcls += self.BCEcls(pcls, t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
 
-            obji = self.BCEobj(pi[..., 4], tobj)
+            img_to_be_checked_idx = torch.where(det_to_check == 1)[0]
+            pi_tbc = pi[img_to_be_checked_idx, ..., 4]  # tbc for to be checked
+            tobj_tbc = tobj[img_to_be_checked_idx]
+            # if there are images to be checked
+            if tobj_tbc.shape[0] != 0:
+                obji = self.BCEobj(pi_tbc, tobj_tbc)
+            else:
+                # otherwise obji is 0
+                obji = torch.zeros(1, device=self.device)
             lobj += obji * self.balance[i]  # obj loss
             if self.autobalance:
                 self.balance[i] = self.balance[i] * 0.9999 + 0.0001 / obji.detach().item()
 
         if self.autobalance:
             self.balance = [x / self.balance[self.ssi] for x in self.balance]
+
+        # TODO later, add classification loss weight in hyp
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
-        bs = tobj.shape[0]  # batch size
+        lcls_cls *= self.hyp['cls_road_cond']
+        bs = sum(det_to_check)
 
-        return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
+        return (lbox + lobj + lcls) * bs, lcls_cls, torch.cat((lbox, lobj, lcls)).detach(), lcls_cls.detach()
 
     def build_targets(self, p, targets):
+        # targets = [image, class, x, y, w, h] where image corresponds to the image number
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
         tcls, tbox, indices, anch = [], [], [], []
